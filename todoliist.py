@@ -32,6 +32,8 @@ CREATE TABLE IF NOT EXISTS tasks (
 ''')
 connection.commit()
 
+tasked = []
+
 current_user_id = None
 
 def adduser():
@@ -74,19 +76,28 @@ def adduser():
                 else:
                     messagebox.showerror('Ошибка', 'Не удалось создать пользователя')
         else:
-            messagebox.showinfo('Info', 'Please enter your username')
+            messagebox.showinfo('Ошибка', 'Введите username')
 
     add = ttk.Button(verificate, text='Проверить', command=user)
     add.pack(pady=5)
 
 def load_tasks():
-    global current_user_id
+    global current_user_id, tasked
     if current_user_id is not None:
         listbox.delete(0, END)
-        cursor.execute("SELECT title, date FROM tasks WHERE user_id = ?", (current_user_id,))
+        tasked.clear()
+
+        cursor.execute("SELECT task_id, title, date FROM tasks WHERE user_id = ?", (current_user_id,))
         tasks = cursor.fetchall()
-        for task in tasks:
-            listbox.insert(END, f"{task[0]} - {task[1]}")
+
+        for task_row in tasks:
+            task_id, title, date = task_row
+            tasked.append({
+                'task_id': task_id,
+                'title': title,
+                'date': date
+            })
+            listbox.insert(END, f"{title} - {date}")
 
 def add_task():
     global current_user_id
@@ -105,14 +116,38 @@ def add_task():
                        ''', (current_user_id, task, date))
         connection.commit()
 
+        task_id = cursor.lastrowid
+
+        tasked.append({
+            'task_id': task_id,
+            'title': task,
+            'date': date
+        })
+
         listbox.insert(END, f"{task} - {date}")
 
         entrytask.delete(0, END)
         entrydate.delete(0, END)
 
-        messagebox.showinfo('Успех', 'Задача добавлена!')
     else:
         messagebox.showwarning('Ошибка', 'Заполните все поля!')
+def del_task():
+    global current_user_id
+
+    selected_task = listbox.curselection()
+    if selected_task:
+        selected_task = selected_task[0]
+        if 0 <= selected_task < len(tasked):
+            task_info = tasked[selected_task]
+            task_id = task_info['task_id']
+            cursor.execute("DELETE FROM tasks WHERE task_id = ?", (task_id,))
+            connection.commit()
+
+            tasked.pop(selected_task)
+
+            listbox.delete(selected_task)
+        else:
+            messagebox.showerror('Ошибка', 'Не удалось найти задачу')
 
 frame = Frame(root)
 frame.pack(pady=20)
@@ -127,7 +162,8 @@ entrydate.grid(row=1, column=1, padx=5, pady=5)
 
 add = ttk.Button(frame, text='Добавить', command=add_task)
 add.grid(row=2, column=0, columnspan=2, pady=10)
-
+dele = ttk.Button(frame, text='Удалить', command=del_task)
+dele.grid(row=2, column=2, columnspan=2, pady=10)
 listbox = Listbox(
     root,
     width=60,
